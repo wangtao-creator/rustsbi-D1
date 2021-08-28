@@ -79,7 +79,7 @@ fn xtask_run_D1(xtask_env: &XtaskEnv) {
     .arg("ddr3")
     .status().unwrap();
     if !status.success() {
-        panic!("run nezha failed")
+        panic!("run D1 failed")
     }
     let status = Command::new("xfel")
     .current_dir(project_root().join("xtask"))

@@ -3,8 +3,9 @@ use core::{
     ops::{Generator, GeneratorState},
 };
 use riscv::register::scause::{Trap, Exception};
+use rustsbi::println;
 
-use crate::runtime::{MachineTrap, Runtime, SupervisorContext};
+use crate::{hal::read_reg,runtime::{MachineTrap, Runtime, SupervisorContext}};
 use crate::feature;
 
 pub fn execute_supervisor(supervisor_mepc: usize, a0: usize, a1: usize) -> ! {
@@ -60,7 +61,20 @@ pub fn execute_supervisor(supervisor_mepc: usize, a0: usize, a1: usize) -> ! {
                     }
                 }
             },
-            GeneratorState::Yielded(MachineTrap::LoadFault(addr)) => {
+            GeneratorState::Yielded(MachineTrap::LoadFault(_addr)) => {
+                let ctx = rt.context_mut();
+
+                    unsafe {
+                        feature::do_transfer_trap(ctx, Trap::Exception(Exception::LoadFault))
+                    }
+            },
+            GeneratorState::Yielded(MachineTrap::LoadPageFault(_addr)) => {
+                let ctx = rt.context_mut();
+                    unsafe {
+                        feature::do_transfer_trap(ctx, Trap::Exception(Exception::LoadPageFault))
+                    }
+            },
+            GeneratorState::Yielded(MachineTrap::StorePageFault(addr)) => {
                 let ctx = rt.context_mut();
                 if feature::is_page_fault(addr) {
                     unsafe {
@@ -83,6 +97,12 @@ pub fn execute_supervisor(supervisor_mepc: usize, a0: usize, a1: usize) -> ! {
                         feature::do_transfer_trap(ctx, Trap::Exception(Exception::StoreFault))
                     }
                 }
+            },
+            GeneratorState::Yielded(MachineTrap::InstructionPageFault(addr)) => {
+                let ctx = rt.context_mut();
+                println!("[rustsbi] {:?}",Exception::InstructionPageFault);
+                println!("[rustsbi] addr: [0x{:x}] mepc: [0x{:x}] 0x{:x}",addr,ctx.mepc,unsafe{read_reg::<usize>(addr,0)});
+                loop{}
             },
             GeneratorState::Complete(()) => unreachable!(),
         }

@@ -1,20 +1,13 @@
+use crate::hal;
+
 use rustsbi::println;
-use k210_hal::{clock::Clocks, fpioa, pac, prelude::*, clint::msip};
-use riscv::register::{mhartid, mip};
+use crate::hal::{Serial,msip, pac_encoding::UART0_BASE};
+use riscv::register::mip;
 
 pub fn init_peripheral() {
-    let p = pac::Peripherals::take().unwrap();
 
-    let mut sysctl = p.SYSCTL.constrain();
-    let fpioa = p.FPIOA.split(&mut sysctl.apb0);
-    let clocks = Clocks::new();
-    let _uarths_tx = fpioa.io5.into_function(fpioa::UARTHS_TX);
-    let _uarths_rx = fpioa.io4.into_function(fpioa::UARTHS_RX);
-    // Configure UART
-    let serial = p.UARTHS.configure(115_200.bps(), &clocks);
-    let (tx, rx) = serial.split();
 
-    rustsbi::legacy_stdio::init_legacy_stdio_embedded_hal_fuse(tx, rx);
+    rustsbi::legacy_stdio::init_legacy_stdio_embedded_hal(Serial::new(UART0_BASE));
     rustsbi::init_timer(Timer);
     rustsbi::init_reset(Reset);
     rustsbi::init_ipi(Ipi);
@@ -27,7 +20,7 @@ impl rustsbi::Ipi for Ipi {
         1
     }
     fn send_ipi_many(&mut self, hart_mask: rustsbi::HartMask) -> rustsbi::SbiRet {
-        for i in 0..=1 {
+        for i in 0..=self.max_hart_id() {
             if hart_mask.has_bit(i) {
                 msip::set_ipi(i);
                 msip::clear_ipi(i);
@@ -42,8 +35,8 @@ struct Timer;
 impl rustsbi::Timer for Timer {
     fn set_timer(&mut self, stime_value: u64) {
         // This function must clear the pending timer interrupt bit as well.
-        use k210_hal::clint::mtimecmp;
-        mtimecmp::write(mhartid::read(), stime_value);
+        use hal::clint::mtimecmp;
+        mtimecmp::write(stime_value);
         unsafe { mip::clear_mtimer() };
     }
 }
@@ -52,7 +45,7 @@ pub struct Reset;
 
 impl rustsbi::Reset for Reset {
     fn system_reset(&self, reset_type: usize, reset_reason: usize) -> rustsbi::SbiRet {
-        println!("[rustsbi] reset triggered! todo: shutdown all harts on k210; program halt. Type: {}, reason: {}", reset_type, reset_reason);
+        println!("[rustsbi] reset triggered! todo: shutdown all harts on D1; program halt. Type: {}, reason: {}", reset_type, reset_reason);
         loop {}
     }
 }

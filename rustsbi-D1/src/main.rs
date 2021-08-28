@@ -5,6 +5,7 @@
 #![feature(generator_trait)]
 #![feature(default_alloc_error_handler)]
 
+mod hal;
 mod peripheral;
 mod hart_csr_utils;
 mod runtime;
@@ -51,7 +52,7 @@ extern "C" fn rust_main() -> ! {
     if hartid == 0 {
         init_bss();
     }
-
+    init_pmp();
     runtime::init();
     if hartid == 0 {
         init_heap();
@@ -63,11 +64,22 @@ extern "C" fn rust_main() -> ! {
     delegate_interrupt_exception();
     if hartid == 0 {
         hart_csr_utils::print_hart_csrs();
-        println!("[rustsbi] enter supervisor 0x40200000");
+        println!("[rustsbi] enter supervisor 0x40200000\n\r");
     }
     execute::execute_supervisor(0x40200000, hartid, DEVICE_TREE_BINARY.as_ptr() as usize)
 }
 
+fn init_pmp(){
+    use riscv::register::*;
+    let cfg = 0b000011110000111100001111usize;
+    pmpcfg0::write(0);
+    pmpcfg2::write(0);
+    pmpcfg0::write(cfg);
+    pmpaddr0::write(0x40000000usize >> 2);
+    pmpaddr1::write(0x40200000usize >> 2);
+    pmpaddr2::write(0x80000000usize >> 2);
+    pmpaddr3::write(0xc0000000usize >> 2);
+}
 fn init_bss() {
     extern "C" {
         static mut ebss: u32;
